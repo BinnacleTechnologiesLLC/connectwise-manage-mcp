@@ -282,7 +282,13 @@ export async function startHttpTransport(): Promise<HttpServer> {
       // Empty s2sSecret is only reachable when MCP_ALLOW_INSECURE_DEV=1;
       // startup refuses otherwise. A configured secret is always enforced,
       // before any credential extraction.
-      if (s2sSecret && !verifyS2sHeader(headerValue(req.headers[S2S_HEADER]), s2sSecret)) {
+      // Direct OAuth clients authenticate with an Entra bearer token below.
+      // Preserve the existing X-Gateway-S2S requirement when OAuth is disabled.
+      if (
+        !oauthEnabled &&
+        s2sSecret &&
+        !verifyS2sHeader(headerValue(req.headers[S2S_HEADER]), s2sSecret)
+      ) {
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({

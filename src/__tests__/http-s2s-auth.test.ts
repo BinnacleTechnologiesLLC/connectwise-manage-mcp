@@ -50,6 +50,10 @@ const ENV_KEYS = [
   "AUTH_MODE",
   "MCP_TRANSPORT",
   "MCP_OAUTH_ENABLED",
+  "MCP_SERVER_URL",
+  "AZURE_TENANT_ID",
+  "AZURE_CLIENT_ID",
+  "AZURE_AUDIENCE",
   "CW_MANAGE_COMPANY_ID",
   "CW_MANAGE_PUBLIC_KEY",
   "CW_MANAGE_PRIVATE_KEY",
@@ -331,6 +335,40 @@ describe("HTTP startup fails closed without CONDUIT_S2S_SECRET", () => {
 
     expect(server.address).toBe("127.0.0.1");
     assertNoSecrets(logs.text());
+  });
+});
+
+describe("direct OAuth /mcp auth", () => {
+  it("skips X-Gateway-S2S when OAuth is enabled and requires a bearer token instead", async () => {
+    process.env.CONDUIT_S2S_SECRET = S2S_SECRET;
+    delete process.env.MCP_ALLOW_INSECURE_DEV;
+    process.env.MCP_HTTP_HOST = "127.0.0.1";
+    process.env.AUTH_MODE = "env";
+    process.env.MCP_OAUTH_ENABLED = "true";
+
+    // Minimal Entra configuration needed to initialize OAuth middleware.
+    process.env.MCP_SERVER_URL = "https://mcp.example.invalid";
+    process.env.AZURE_TENANT_ID = "11111111-1111-1111-1111-111111111111";
+    process.env.AZURE_CLIENT_ID = "22222222-2222-2222-2222-222222222222";
+    process.env.AZURE_AUDIENCE = "api://22222222-2222-2222-2222-222222222222";
+
+    useCredentialEnv();
+    // useCredentialEnv clears MCP_OAUTH_ENABLED, so enable it after credentials.
+    process.env.MCP_OAUTH_ENABLED = "true";
+
+    const server = await listen();
+
+    const response = await sendHttp({
+      port: server.port,
+      method: "POST",
+      path: "/mcp",
+      headers: mcpHeaders(),
+      body: toolsListBody,
+    });
+
+    expect(response.status).toBe(401);
+    expect(response.body).toContain("Bearer token required");
+    expect(response.body).not.toContain("X-Gateway-S2S");
   });
 });
 
